@@ -1,0 +1,11 @@
+idea,result vs reference,verdict
+Cytometry foundation model (ImmuneFM) as donor encoder,MSE 0.0213 vs 0.0215 (random init),= random initialisation
+Meta Flow Matching (built for unseen patients),+52 % MSE,worse
+Flow matching instead of optimal transport,+55 % MSE,worse
+One conditional network for all 168 maps (CondOT),+113 % MSE,worse
+Donor covariate without regularisation,+176 % MSE,memorises donors
+Per-donor normalised inputs,+16 % MSE,worse
+PCs / PLS of the donor profile for TabPFN,MSE 0.0345 / 0.0350 vs 0.0322,raw columns win
+Lineage-group tables for TabPFN,−2 to +3 % MSE,no gain
+Predicting donor-specific drug effects,two-step = mean effect,not predictable
+Better stim maps plugged into labour prediction,R² 0.423 vs 0.418,n.s. (49/100)

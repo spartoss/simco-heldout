@@ -1,0 +1,103 @@
+diff --git a/stabl_launch/get_foldinfo_on_existing_run.py b/stabl_launch/get_foldinfo_on_existing_run.py
+index 941c0ad..3dc2978 100755
+--- a/stabl_launch/get_foldinfo_on_existing_run.py
++++ b/stabl_launch/get_foldinfo_on_existing_run.py
+@@ -88,6 +88,12 @@ parser.add_argument(
+ )
+ parser.add_argument('--xgb_config_path', type=str, default=None)
+ parser.add_argument(
++    "--blocks",
++    nargs="*",
++    default=None,
++    help="Column-suffix block names; overrides the filename-based stim detection."
++)
++parser.add_argument(
+     "--model_chosen",
+     required=True,
+     help="Model chosen for the regression (put None if classification)."
+@@ -127,7 +133,7 @@ os.makedirs(results_path, exist_ok=True)
+ 
+ df_features, y = process_data(features_path, outcome_path)
+ 
+-stims=get_stims(input_stem)
++stims=args.blocks if args.blocks else get_stims(input_stem)
+ 
+ data_dict=split_features_by_stim(df_features, stims) 
+ 
+diff --git a/stabl_launch/run_regression_cv.py b/stabl_launch/run_regression_cv.py
+index 101146a..f875863 100755
+--- a/stabl_launch/run_regression_cv.py
++++ b/stabl_launch/run_regression_cv.py
+@@ -71,6 +71,28 @@ parser.add_argument(
+     choices=["random_permutation", "knockoff"],
+     help="Type of artificial features for STABL ('random_permutation' or 'knockoff')."
+ )
++parser.add_argument(
++    "--n_splits",
++    type=int,
++    default=100,
++    help="Number of outer GroupShuffleSplit splits (lower it for a smoke test)."
++)
++parser.add_argument(
++    "--outcome_path",
++    default="/scratch/users/bmerwan/simco_work/onset_test/outcome_table_all_pre.csv",
++    help="CSV indexed by sample id holding the outcome column."
++)
++parser.add_argument(
++    "--outcome_col",
++    default="DOS",
++    help="Outcome column (e.g. DOS_offset = DOS - 7*(EGA-40), the gestational-age-free target)."
++)
++parser.add_argument(
++    "--blocks",
++    nargs="*",
++    default=None,
++    help="Column-suffix block names; overrides the filename-based stim detection."
++)
+ args = parser.parse_args()
+ 
+ # --- Use Parsed Arguments ---
+@@ -79,7 +101,7 @@ artificial_type_arg = args.artificial_type # Store the argument value
+ model_chosen=args.model_chosen
+ 
+ # Define outcome path (can remain hardcoded if it's always the same)
+-outcome_path = "/scratch/users/bmerwan/simco_work/onset_test/outcome_table_all_pre.csv"
++outcome_path = args.outcome_path
+ 
+ # Define output path dynamically based on inputs
+ input_stem = Path(features_path).stem # Get filename without extension
+@@ -98,12 +120,12 @@ os.makedirs(results_path, exist_ok=True)
+ 
+ # Load features and outcomes Casenumber
+ df_features = pd.read_csv(features_path, index_col=0) #index_col=0
+-df_outcome = pd.read_csv(outcome_path, index_col=0, dtype={'DOS': int})
++df_outcome = pd.read_csv(outcome_path, index_col=0, dtype={args.outcome_col: int})
+ common = df_features.index.intersection(df_outcome.index)
+ df_features = df_features.loc[common]
+ df_outcome = df_outcome.loc[common]
+ # Outcome is in the column 'DOS'
+-y = df_outcome["DOS"]
++y = df_outcome[args.outcome_col]
+ #y = df_features["Recurrence"]
+ # ---------------------------
+ # Split features by stim
+@@ -133,6 +155,10 @@ else:
+     print(f"Warning: Could not determine stims from filename stem '{input_stem}'. Using default full list.")
+     stims = ['Unstim','TNFa', 'LPS', 'IL246', 'IFNa', 'GMCSF', 'PI', 'IL33']
+ 
++if args.blocks:
++    stims = args.blocks
++    print("Using blocks from --blocks:", stims)
++
+ data_dict = {}
+ 
+ for stim in stims:
+@@ -151,7 +177,7 @@ if not data_dict:
+ 
+ groups = df_features.index.to_series().apply(lambda x: x.split('_')[0])
+ #groups=df_features.index.to_series()
+-outer_cv = GroupShuffleSplit(n_splits=100, test_size=0.2, random_state=42)
++outer_cv = GroupShuffleSplit(n_splits=args.n_splits, test_size=0.2, random_state=42)
+ 
+ #outer_cv = LeaveOneGroupOut()
+ print(f"INFO: Using GroupShuffleSplit for outer CV ") # Optional: Add print statement

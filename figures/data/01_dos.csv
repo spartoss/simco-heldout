@@ -1,0 +1,10 @@
+features,arm,R2,RMSE_days,note
+untrained random network (ICNN),rscaled_s0_both,0.3293006420135498,25.82814272345127,177 visits
+maps of the wrong stimulation / cell type,crossswap_s0_both,0.3434430956840515,25.554384169706942,177 visits
+"measured resting cells only
+(frequencies, medians, quantiles)",d_qtl,0.3973573446273803,24.48269104172438,177 visits
+CellOT (paper),cellot,0.4182915091514587,24.05370171940797,177 visits
+"CellOT + measured features, simulated
+quantiles, correlation filter",rule_corr,0.4926834106445312,22.293788135390074,"175 visits, RMSE derived from R²"
+"measured resting cells only,
+dense supervised model (no simulation)",ml_dos_auto,0.5454058013709616,21.001804842127484,"175 visits, model chosen inside each split"

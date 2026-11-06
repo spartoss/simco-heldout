@@ -1,0 +1,7 @@
+features,method,MSE
+no donor information,pfn_S0,0.04148
++ 5 PCs of the donor's own cell-type profile,pfn_S1_5,0.03616
+raw own profile instead (13 markers × 5 quantiles),pfn_L1cat,0.03456
+"+ cell-type frequencies, pregnant / not, blood PCs",pfn_L1all_raw,0.03413
++ same marker in the donor's 27 other cell types,pfn_L1allM,0.03268
+compact version (72 columns),pfn_C_ms_lin,0.03217
