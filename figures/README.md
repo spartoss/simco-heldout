@@ -23,6 +23,7 @@ except 04 (RMSE) and 10a (variance components).
 | 10d_noise_floor_mse | 7 | MSE twin of 10b: floor 0.0013 (split-half) -> 0.0036 realistic (donor × well noise, stimulated + resting wells); best model 0.0305, so noise = 12 % of our error |
 | 10e_vs_one_well | 7 | same target for everyone (one well): perfect model 0.0116, another well of the same donor 0.0231, ours 0.0381 (1.6×), paper CellOT 0.0475; GMCSF / TNFa ≈ re-measuring the donor |
 | 10c_variance_explained | 7 (backup) | best model: share of donor differences explained; noise 4 %, real but unexplained 30 % |
+| 12_lineage_grouping | TabPFN | one table per lineage group vs per cell type, per (cell type, stim): helps some pairs, hurts others; no net gain with the final features |
 | 11_what_did_not_work | 8 | failed leads with their numbers |
 
 Supersedes the older figures in simco/meeting/figures, simco/presentation and

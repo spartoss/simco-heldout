@@ -56,7 +56,8 @@ Up to 1,680 independent CellOT maps (input-convex networks, dual OT loss) traine
 
 ### 4. Donor covariates: patient-aware maps
 - Conditional CellOT, convex in the cells for every covariate value (CondOT-style): `lc/cond_icnn.py`, `lc/cond_train.py`
-  with covariates = the donor's resting profile (PCs), whole-blood profile, learned embeddings, phenotype subclusters;
+  with covariates = the donor's resting profile (PCs), whole-blood profile, learned embeddings (incl. a foundation
+  model, no gain) and phenotype subclusters (kept in the final model);
   regularised covariate path; variants of the conditioning architecture (`lc/var_score.py`)
 - Closed-form conditional maps and residual models: `lc/cond_baselines.py`, `lc/residual_predict.py`
 - Donor-ID oracle (how much of the response is learnable at all): `lc/cond_train.py`

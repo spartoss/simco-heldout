@@ -411,6 +411,48 @@ footnote(fig, "Leave-one-donor-out, 19 donors, 5 stims (PI, IL33 out), q50-q90 s
               "perfect model = noise of one well (half the squared gap between two wells).")
 save(fig, "10e_vs_one_well", d10e)
 
+
+# ---------------------------------------------------------------- 12. lineage-group TabPFN tables vs per-cell-type tables
+# atlas_heldout lc/tab_v2.py --mode group --groupset cur, scored on leave-one-donor-out (work/lc/tab/lin2_lodo_cur,
+# lc/tab_compare.py): % MSE change of the group table vs the per-cell-type table, same features, per (cell type, stim).
+LG = pd.read_csv(LC / "tab/lin2_lodo_cur/lin_group_vs_ct.csv")
+GRP = {"CD4 memory": ["CD4Tcm", "CD4Tcm_CCR2pos", "CD4Tem", "CD4Tem_CCR2pos"],
+       "CD8 effector": ["CD8Tem", "CD8Tem_CCR2pos", "CD8Teff", "CD8Tcells_Th1"],
+       "NK": ["CD56loCD16posNK", "NK_cells_CD11cneg", "NK_cells_CD11cpos", "CD56hiCD16negNK"],
+       "monocytes": ["cMCs", "intMCs", "ncMCs"]}
+order = [c for g in GRP.values() for c in g if c in set(LG.celltype)]
+glab = {c: g for g, cs in GRP.items() for c in cs}
+stims_ = [x for x in ["IFNa", "IL246", "LPS", "TNFa"] if x in set(LG.stim)]
+div = LinearSegmentedColormap.from_list("div", ["#1c5cab", "#86b6ef", "#f0efec", "#ef9a8f", "#c0362c"])
+panels = [("Gcur_L1cat", "raw own profile (L1cat)"), ("Gcur_L1allM", "final features (L1allM)")]
+fig, axs = plt.subplots(1, 2, figsize=(12.5, 6.8), sharey=True)
+fig.subplots_adjust(left=0.24, right=0.9, top=0.8, bottom=0.08, wspace=0.08)
+for ax, (gm, lab) in zip(axs, panels):
+    X = LG[LG.group_model == gm]
+    H = X.pivot(index="celltype", columns="stim", values="pct_change").reindex(index=order, columns=stims_)
+    Pv = X.pivot(index="celltype", columns="stim", values="p").reindex(index=order, columns=stims_)
+    im = ax.imshow(H.values, cmap=div, vmin=-30, vmax=30, aspect="auto")
+    for i in range(H.shape[0]):
+        for j in range(H.shape[1]):
+            v = H.iat[i, j]
+            if np.isnan(v):
+                continue
+            star = "**" if Pv.iat[i, j] < 0.01 else "*" if Pv.iat[i, j] < 0.05 else ""
+            ax.text(j, i, f"{v:+.0f}{star}", ha="center", va="center", fontsize=10, color="white" if abs(v) > 20 else INK)
+    ax.set_xticks(range(len(stims_)), stims_); ax.set_title(lab, loc="left", fontsize=12)
+    ax.tick_params(length=0); [sp.set_visible(False) for sp in ax.spines.values()]
+    ax.set_xticks(np.arange(-.5, len(stims_)), minor=True); ax.set_yticks(np.arange(-.5, len(order)), minor=True)
+    ax.grid(False); ax.grid(which="minor", color=BG, lw=3); ax.tick_params(which="minor", length=0)
+    for k in np.cumsum([sum(c in order for c in cs) for cs in GRP.values()])[:-1]:
+        ax.axhline(k - 0.5, color=INK2, lw=1.2)
+axs[0].set_yticks(range(len(order)), [f"{c}  ({glab[c]})" for c in order])
+cax = fig.add_axes([0.915, 0.2, 0.012, 0.5]); cb = fig.colorbar(im, cax=cax)
+cb.set_label("% MSE change from grouping\n(blue = grouping better)", color=INK2); cb.outline.set_visible(False)
+title(fig, "Grouping cell types by lineage helps some and hurts others: no net gain with the final features",
+      "One TabPFN table per lineage group vs one per cell type, same features; * p < 0.05, ** p < 0.01 (Wilcoxon over 19 donors)")
+footnote(fig, "Leave-one-donor-out, TabPFN alone, q50-q90 selected features. Empty cells: pair not in a group for that stim.")
+save(fig, "12_lineage_grouping", LG[LG.group_model.isin([g for g, _ in panels])])
+
 # ---------------------------------------------------------------- 11. what did not work (table figure)
 K15 = pd.read_csv(DAT / "k15_methods_cases.csv").pivot_table(index=["repeat", "donor"], columns="method", values="mse")
 km = K15.mean(); ref = km["CellOT_paired"]
