@@ -87,35 +87,42 @@ d1 = pd.concat([d1, pd.DataFrame([
      "175 visits, RMSE derived from R²"),
     ("measured resting cells only,\ndense supervised model (no simulation)", "ml_dos_auto", auto.R2, auto.RMSE,
      "175 visits, model chosen inside each split")], columns=d1.columns)], ignore_index=True)
-fig, ax = plt.subplots(figsize=(11.5, 6.4)); fig.subplots_adjust(left=0.33, right=0.97, top=0.82, bottom=0.12)
+fig, ax = plt.subplots(figsize=(11.5, 6.2)); fig.subplots_adjust(left=0.33, right=0.97, top=0.88, bottom=0.12)
 hbar(ax, d1.features, d1.R2, [REF, REF, REF, MUTED, MUTED, BLUE],
      [f"R² {r:.2f}  ·  {e:.1f} days" for r, e in zip(d1.R2, d1.RMSE_days)], 0.7)
 ax.axhline(1.5, color=GRID, lw=1.5)   # separates the paper and its baselines (top) from our improvements (bottom two)
 ax.set_xlabel("R² of days-to-labour prediction")
-title(fig, "Predicting labour onset: the gain comes from the measured cells, not the simulation",
-      f"Simple inputs come close to CellOT; using the measured cells richly cuts the error from "
-      f"{d1.RMSE_days.iloc[3]:.1f} to {d1.RMSE_days.iloc[-1]:.1f} days (better in {int(auto.vs_cellot_wins)}/100 splits)")
+title(fig, "Predicting labour onset")
 footnote(fig, "Paper protocol (Stabl + XGBoost params_43, 100 splits), row-order bug fixed. 177 visits; last two rows 175 (2 mishandled visits removed).")
 save(fig, "01_dos", d1)
 
-# ---------------------------------------------------------------- 3. stim: CellOT vs the average shift, per new donor
-BD = pd.read_csv(FIN / "by_donor_rule.csv", index_col=0)
-d3 = BD[["shift", "CellOT_paper"]].reset_index()
+# ---------------------------------------------------------------- 3. baselines: CellOT vs closed-form transport maps (baselines_mse.py)
+BD = pd.read_csv(FIN / "by_donor_rule.csv", index_col=0)                 # LODO per-donor MSE, used by figure 05
 M = pd.read_csv(FIN / "metrics_rule.csv").set_index("method")
-win = int((d3.CellOT_paper < d3["shift"]).sum())
-gain = 100 * (1 - M.loc["CellOT_paper", "MSE"] / M.loc["shift", "MSE"])
-fig, ax = plt.subplots(figsize=(7.5, 6.6)); fig.subplots_adjust(left=0.14, right=0.96, top=0.82, bottom=0.12)
-lim = (0, max(d3[["shift", "CellOT_paper"]].max()) * 1.08)
-ax.plot(lim, lim, color=MUTED, ls="--", lw=1.2); ax.set_xlim(lim); ax.set_ylim(lim)
-ax.scatter(d3["shift"], d3.CellOT_paper, s=80, color=BLUE, edgecolor=BG, lw=2, zorder=3)
-ax.text(lim[1] * 0.97, lim[1] * 0.9, "CellOT worse", ha="right", color=MUTED, fontsize=10, rotation=0)
-ax.text(lim[1] * 0.97, lim[1] * 0.05, "CellOT better", ha="right", color=MUTED, fontsize=10)
-ax.set_xlabel("error of 'add the average response' (MSE)"); ax.set_ylabel("error of CellOT (MSE)")
-ax.grid(color=GRID); ax.set_axisbelow(True); ax.set_aspect("equal")
-title(fig, "On new donors, CellOT barely beats the average response",
-      f"One dot per held-out donor: CellOT {gain:.0f} % lower error on average, better for {win}/19 donors (n.s.)")
-footnote(fig, "Leave-one-donor-out (train 18, test 1), 5 stims (PI, IL33 out), selected features q50-q90.")
-save(fig, "03_stim_cellot_vs_shift", d3)
+BL = pd.read_csv(DAT / "baselines_cases.csv")
+W3 = BL[BL.k == 15].pivot_table(index=["repeat", "donor"], columns="method", values="mse")
+lab3 = {"CellOT_paper": "CellOT (neural OT)", "gauss_ot": "Gaussian OT (affine)", "median_shift": "median shift",
+        "quantile_map": "per-marker quantile map"}
+col3 = {"CellOT_paper": BLUE, "gauss_ot": ORANGE, "median_shift": MUTED, "quantile_map": REF}
+order3 = ["CellOT_paper", "gauss_ot", "median_shift", "quantile_map"]
+d3 = pd.DataFrame({"method": order3, "MSE_k15": [W3[m].mean() for m in order3],
+                   "CellOT_better_units": [np.nan] + [int((W3.CellOT_paper < W3[m]).sum()) for m in order3[1:]]})
+K3 = [2, 3, 4, 5, 6, 8, 15]
+C3 = BL[BL.k.isin(K3)].groupby(["method", "k"]).mse.mean().pipe(np.sqrt).rename("RMSE").reset_index()
+fig, ax = plt.subplots(figsize=(11, 5.8)); fig.subplots_adjust(left=0.09, right=0.78, top=0.8, bottom=0.13)
+for m in order3:
+    x_ = C3[C3.method == m].sort_values("k")
+    ax.plot(x_.k, x_.RMSE, color=col3[m], lw=2.6 if m == "CellOT_paper" else 2.2, marker="o", ms=6)
+    ax.text(15.4, x_.RMSE.iloc[-1], lab3[m], color=col3[m] if m != "quantile_map" else INK2, va="center", fontsize=11)
+ax.set_xticks(K3); ax.set_xlim(1.6, 15.3)
+ax.set_xlabel("number of training donors"); ax.set_ylabel("error on new donors (RMSE)")
+ax.grid(color=GRID); ax.set_axisbelow(True)
+g3 = 100 * (1 - d3.MSE_k15[0] / d3.MSE_k15[1])
+title(fig, "On new donors, CellOT beats every closed-form transport map",
+      f"Lower error at every training-set size; with 15 donors, {g3:.0f} % lower MSE than Gaussian OT "
+      f"({int(d3.CellOT_better_units[1])}/{len(W3)} held-out donor-repeats)")
+footnote(fig, "5 repeats × 4 held-out donors, same training donors and cells for every map; 5 stims (PI, IL33 out), q50-q90.")
+save(fig, "03_baselines", C3.merge(d3, on="method", how="left"))
 
 # ---------------------------------------------------------------- 4. learning curve (RMSE), from lc_rmse.py
 LR = pd.read_csv(DAT / "lc_rmse_cases.csv")
@@ -135,17 +142,29 @@ r = d4.pivot(index="method", columns="k", values="RMSE")
 title(fig, "The subcluster covariate helps from 5 donors; the whole-blood covariate needs ~15",
       f"k = 3: paper {r.loc['CellOT_paper', 3]:.3f} vs covariates {r.loc['CellOT_cluster', 3]:.3f} / {r.loc['CellOT_pcblood', 3]:.3f};  "
       f"k = 15: paper {r.loc['CellOT_paper', 15]:.3f} vs {r.loc['CellOT_cluster', 15]:.3f} / {r.loc['CellOT_pcblood', 15]:.3f}")
-footnote(fig, "Held-out donors (4 per repeat, repeats 1-4; repeat 0 set the covariate penalty), 5 stims (PI, IL33 out), q50-q90, "
-              "effect > 0.0273. RMSE = sqrt(mean per-donor MSE).")
+footnote(fig, "4 held-out donors per repeat, repeats 1-4 (repeat 0 set the covariate penalty); 5 stims (PI, IL33 out), q50-q90; "
+              "each training size is a separate training.")
 save(fig, "04_learning_curve", d4)
 
 # ---------------------------------------------------------------- 5. stim ladder (MSE)
+# TabPFN = compact 72-column feature set (C_ms_lin), prediction averaged over the 4 TabPFN v2 regressor checkpoints
+# (atlas_heldout lc/tab_v2.py --ckpt, lc/avg_preds.py -> work/lc/tab/ckpt_lodo); CellOT variants from tab/final; same cases.
+KEYC = ["repeat", "stim", "celltype", "k", "donor", "q", "marker"]
+CK = pd.read_pickle(LC / "tab/ckpt_lodo/cases.pkl"); CK = CK[CK.set.str.startswith("rule")]
+FN = pd.read_pickle(FIN / "cases.pkl"); FN = FN[FN.set.str.startswith("rule")]
+L5 = CK[KEYC + ["true", "pfn_avg4"]].merge(FN[KEYC + ["CellOT_paper", "CellOT_paired", "CellOT_cluster", "CellOT_pcblood"]], on=KEYC)
+L5["mix_cluster"] = 0.4 * L5.CellOT_cluster + 0.6 * L5.pfn_avg4
+L5["mix_pcblood"] = 0.4 * L5.CellOT_pcblood + 0.6 * L5.pfn_avg4
+mix_best = "mix_cluster" if ((L5.mix_cluster - L5.true) ** 2).mean() <= ((L5.mix_pcblood - L5.true) ** 2).mean() else "mix_pcblood"
+PD5 = L5.groupby("donor").apply(lambda g: pd.Series({m: ((g[m] - g.true) ** 2).mean() for m in
+                                ["CellOT_paper", "CellOT_paired", "CellOT_cluster", "pfn_avg4", "mix_cluster", "mix_pcblood"]}))
 steps = [("CellOT, paper training", "CellOT_paper"), ("+ paired batches (one donor per batch)", "CellOT_paired"),
-         ("+ phenotype-subcluster covariate", "CellOT_cluster"), ("+ average with the mean shift (50/50)", "CellOT_cluster+shift"),
-         ("+ TabPFN donor model (0.4 CellOT / 0.6 TabPFN)", "0.4 CellOT_cluster + 0.6 pfn_L1allM")]
-d5 = pd.DataFrame([(l, m, M.loc[m, "MSE"]) for l, m in steps], columns=["step", "method", "MSE"])
+         ("+ phenotype-subcluster covariate", "CellOT_cluster"), ("TabPFN donor model alone", "pfn_avg4"),
+         ("ensemble 0.4 CellOT + 0.6 TabPFN" if mix_best == "mix_cluster" else
+          "ensemble: 0.4 CellOT (whole blood) + 0.6 TabPFN", mix_best)]
+d5 = pd.DataFrame([(l, m, PD5[m].mean()) for l, m in steps], columns=["step", "method", "MSE"])
 d5["change_vs_previous_%"] = 100 * (d5.MSE / d5.MSE.shift() - 1)
-d5["donors_better_than_previous"] = [np.nan] + [int((BD[b] < BD[a]).sum()) for a, b in zip(d5.method[:-1], d5.method[1:])]
+d5["donors_better_than_previous"] = [np.nan] + [int((PD5[b] < PD5[a]).sum()) for a, b in zip(d5.method[:-1], d5.method[1:])]
 fig, ax = plt.subplots(figsize=(11.5, 5.8)); fig.subplots_adjust(left=0.36, right=0.97, top=0.8, bottom=0.14)
 lab = [f"{v:.4f}" + ("" if np.isnan(c) else f"   {c:+.0f} %  ({int(w)}/19 donors)")
        for v, c, w in zip(d5.MSE, d5["change_vs_previous_%"], d5.donors_better_than_previous.fillna(0))]
@@ -155,7 +174,7 @@ tot = 100 * (1 - d5.MSE.iloc[-1] / d5.MSE.iloc[0])
 title(fig, f"Predicting a new donor's stimulated cells: −{tot:.0f} % error vs the paper's CellOT",
       "Each step kept only if it helps on donors never seen in training (% and donors vs the step above)")
 footnote(fig, "Leave-one-donor-out, 19 donors, 5 stims (PI, IL33 out), q50-q90 selected features. "
-              f"With the whole-blood covariate instead: {M.loc['0.4 CellOT_pcblood + 0.6 pfn_L1allM', 'MSE']:.4f} (equivalent).")
+              "TabPFN: 72 features, averaged over 4 TabPFN v2 checkpoints.")
 save(fig, "05_stim_ladder", d5)
 
 # ---------------------------------------------------------------- 6. TabPFN feature engineering
@@ -164,13 +183,14 @@ feat = [("no donor information", "pfn_S0", M), ("+ 5 PCs of the donor's own cell
         ("raw own profile instead (13 markers × 5 quantiles)", "pfn_L1cat", M),
         ("+ cell-type frequencies, pregnant / not, blood PCs", "pfn_L1all_raw", M),
         ("+ same marker in the donor's 27 other cell types", "pfn_L1allM", M),
-        ("compact version (72 columns)", "pfn_C_ms_lin", R)]
+        ("compact version (72 columns)", "pfn_C_ms_lin", R),
+        ("compact, averaged over 4 TabPFN checkpoints", "pfn_avg4", pd.read_csv(LC / "tab/ckpt_lodo/lin_summary.csv").set_index("method"))]
 d6 = pd.DataFrame([(l, m, t.loc[m, "MSE"]) for l, m, t in feat], columns=["features", "method", "MSE"])
-fig, ax = plt.subplots(figsize=(11.5, 5.8)); fig.subplots_adjust(left=0.40, right=0.97, top=0.8, bottom=0.14)
-hbar(ax, d6.features, d6.MSE, [REF, REF, REF, REF, BLUE, BLUE], [f"{v:.4f}" for v in d6.MSE], 0.05)
+fig, ax = plt.subplots(figsize=(11.5, 6.2)); fig.subplots_adjust(left=0.40, right=0.97, top=0.8, bottom=0.13)
+hbar(ax, d6.features, d6.MSE, [REF, REF, REF, REF, BLUE, BLUE, BLUE], [f"{v:.4f}" for v in d6.MSE], 0.05)
 ax.set_xlabel("error on new donors, TabPFN alone (MSE)")
 title(fig, "TabPFN: raw features and the donor's other cell types carry the signal",
-      "Target = the donor's deviation from the average response; PCs lose information, other cell types add it")
+      "Target = the donor's deviation from the average response")
 footnote(fig, "Leave-one-donor-out, 19 donors, 5 stims, q50-q90 selected features. TabPFN v2 regressor, one table per (stim, cell type).")
 save(fig, "06_tabpfn_features", d6)
 
@@ -184,7 +204,8 @@ LIN = {"CD4 T": ["CD4Tcm", "CD4Tcm_CCR2pos", "CD4Teff", "CD4Tem", "CD4Tem_CCR2po
 cases["lineage"] = cases.celltype.map({c: l for l, cs in LIN.items() for c in cs})
 assert cases.lineage.notna().all()
 cases["se_prev"] = (0.5 * cases.CellOT_paired + 0.5 * cases["shift"] - cases.true) ** 2
-cases["se_best"] = (0.4 * cases.CellOT_cluster + 0.6 * cases.pfn_L1allM - cases.true) ** 2
+cases = cases.merge(L5[KEYC + ["mix_cluster"]], on=KEYC)                   # final model: subcluster CellOT + 4-checkpoint TabPFN
+cases["se_best"] = (cases.mix_cluster - cases.true) ** 2
 
 def by(g):
     pdn = cases.groupby(g + ["donor"])[["se_prev", "se_best"]].mean().reset_index()
@@ -254,7 +275,12 @@ save(fig, "09_plate_design", pd.DataFrame({"note": ["schematic, no data"]}))
 
 # ---------------------------------------------------------------- 10c. share of donor differences explained (backup)
 V = pd.read_csv(FIN / "variance_rule.csv")
-V = V[V.method == "0.4 CellOT_cluster + 0.6 pfn_L1allM"].copy()
+V = V[V.method == "0.4 CellOT_cluster + 0.6 pfn_L1allM"].copy().set_index("stim")
+KV = ["stim", "celltype", "q", "marker"]                                      # as atlas_heldout lc/final_compare.py
+for st_, h_ in [("ALL", cases)] + list(cases.groupby("stim")):
+    tch = h_.true - h_.groupby(KV).true.transform("mean")
+    V.loc[st_, "explained"] = 1 - ((h_.mix_cluster - h_.groupby(KV).mix_cluster.transform("mean") - tch) ** 2).mean() / (tch ** 2).mean()
+V = V.reset_index()
 V["average response"] = V.baseline_shift
 V["added by our model"] = V.explained - V.baseline_shift
 V["noise (plate × donor)"] = V.noise
@@ -337,7 +363,7 @@ steps = [("previous estimate: split one measurement\nin two halves (cell samplin
          ("+ donor × well noise, stimulated wells", fl["floor_dxw"], REF, None),
          ("+ donor × well noise, resting wells\n= realistic floor", fl["floor_resp"], MUTED, None),
          ("well effect shared by all donors not learned\n(stimulated wells only)", fl["floor_all"], REF, None),
-         ("CellOT + TabPFN (ours)", M.loc["0.4 CellOT_cluster + 0.6 pfn_L1allM", "MSE"], BLUE, None),
+         ("CellOT + TabPFN (ours)", d5.MSE.iloc[-1], BLUE, None),
          ("CellOT, paper training", M.loc["CellOT_paper", "MSE"], LIGHTBLUE, None),
          ("average response only", M.loc["shift", "MSE"], REF, None)]
 d10d = pd.DataFrame([(l, v) for l, v, _, _ in steps], columns=["step", "MSE"])
@@ -349,7 +375,7 @@ for yi, (l, v, c, h) in zip(yy, steps):
 ax.set_yticks(yy, d10d.step); ax.tick_params(axis="y", length=0)
 ax.set_xlim(0, 0.048); ax.grid(axis="x", color=GRID); ax.set_axisbelow(True)
 ax.set_xlabel("error on new donors (MSE)")
-best = M.loc["0.4 CellOT_cluster + 0.6 pfn_L1allM", "MSE"]
+best = d5.MSE.iloc[-1]
 title(fig, f"Noise explains only {100 * fl['floor_resp'] / best:.0f} % of our remaining error",
       f"Realistic noise floor {fl['floor_resp']:.4f} vs our best model {best:.4f}: most of the error is real donor signal still missed")
 footnote(fig, "Leave-one-donor-out, 19 donors, 5 stims (PI, IL33 out), q50-q90 selected features. Floors from the 3 replicate wells "
@@ -365,7 +391,7 @@ sys.path.insert(0, str(SC / "atlas_heldout"))
 from lc.paths import MARKERS, QS
 QW = SC / "well_ceiling/work/quant"; WELLS = ("DMSO1", "DMSO2", "DMSO3")
 qi = {q: i for i, q in enumerate(QS)}; mi = {m: i for i, m in enumerate(MARKERS)}
-cases["best"] = 0.4 * cases.CellOT_cluster + 0.6 * cases.pfn_L1allM
+cases["best"] = cases.mix_cluster
 meth = {"best": "best", "CellOT_paper": "CellOT_paper", "shift": "shift"}
 parts_ = []
 for ct, g in cases.groupby("celltype"):
@@ -388,27 +414,19 @@ labels = {"best": "CellOT + TabPFN (ours)", "CellOT_paper": "CellOT, paper train
 tot = OW.groupby("donor")[cols].mean().mean()
 bys = OW.groupby(["stim", "donor"])[cols].mean().groupby("stim").mean()
 d10e = pd.concat([tot.rename("ALL").to_frame().T, bys]).reset_index().rename(columns={"index": "stim"})
-fig, (ax, ax2) = plt.subplots(1, 2, figsize=(14, 6.4), gridspec_kw={"width_ratios": [1.15, 1]})
-fig.subplots_adjust(left=0.215, right=0.98, top=0.78, bottom=0.12, wspace=0.33)
+fig, ax = plt.subplots(figsize=(11, 5.6))
+fig.subplots_adjust(left=0.27, right=0.97, top=0.86, bottom=0.14)
 lab = [labels.get(c, c) for c in cols]; colc = [REF, MUTED, BLUE, LIGHTBLUE, REF]
 yy = np.arange(len(cols))[::-1]
 ax.barh(yy, tot.values, color=colc, height=0.62)
 for yi, v_ in zip(yy, tot.values):
     ax.text(v_ + 0.0008, yi, f"{v_:.4f}", va="center", fontsize=11.5)
 ax.axvline(tot["another well of the same donor"], color=MUTED, ls="--", lw=1.2, zorder=0)
-ax.set_yticks(yy, lab); ax.tick_params(axis="y", length=0); ax.set_xlim(0, 0.05)
+ax.set_yticks(yy, lab); ax.tick_params(axis="y", length=0); ax.set_xlim(0, 0.056)
 ax.grid(axis="x", color=GRID); ax.set_axisbelow(True); ax.set_xlabel("error against one well (MSE)")
-ax.set_title("all stims", loc="left", fontsize=12)
-stims_ = list(bys.index); x = np.arange(len(stims_)); wdt = 0.38
-ax2.bar(x - wdt / 2, bys["another well of the same donor"], wdt, color=MUTED, label="another well of the same donor")
-ax2.bar(x + wdt / 2, bys["best"], wdt, color=BLUE, label="CellOT + TabPFN (ours)")
-ax2.set_xticks(x, stims_); ax2.grid(axis="y", color=GRID); ax2.set_axisbelow(True); ax2.set_ylabel("error against one well (MSE)")
-ax2.legend(loc="upper left", fontsize=10); ax2.set_title("by stimulation", loc="left", fontsize=12)
-ratio = tot["best"] / tot["another well of the same donor"]
-title(fig, f"Predicting an unseen donor: {ratio:.1f}× the gap between two measurements of the same donor",
-      "Same target for everyone: one single well. For GMCSF and TNFa our prediction is about as close as re-measuring the donor")
-footnote(fig, "Leave-one-donor-out, 19 donors, 5 stims (PI, IL33 out), q50-q90 selected features. 3 DMSO-plate wells per donor × stim; "
-              "perfect model = noise of one well (half the squared gap between two wells).")
+title(fig, "Ceiling when predicting a new donor's well")
+footnote(fig, "Leave-one-donor-out, 19 donors, 5 stims (PI, IL33 out), q50-q90. 3 DMSO-plate wells per donor × stim; "
+              "perfect model = noise of one well (half the MSE between two wells).")
 save(fig, "10e_vs_one_well", d10e)
 
 
@@ -452,6 +470,252 @@ title(fig, "Grouping cell types by lineage helps some and hurts others: no net g
       "One TabPFN table per lineage group vs one per cell type, same features; * p < 0.05, ** p < 0.01 (Wilcoxon over 19 donors)")
 footnote(fig, "Leave-one-donor-out, TabPFN alone, q50-q90 selected features. Empty cells: pair not in a group for that stim.")
 save(fig, "12_lineage_grouping", LG[LG.group_model.isin([g for g, _ in panels])])
+
+# ---------------------------------------------------------------- 13. drug effects are not patient-specific (LODO, MSE)
+# atlas_heldout lc/drug_tab.py + lc/drug_score.py: predict a new donor's drug effect E = Q(stim | drug) - Q(stim | plate DMSO)
+# from its resting profile (TabPFN, compact features), leave-one-donor-out, 19 donors, 9 drugs, selected features q50-q90.
+# E0 = mean effect of the training donors; E_B = TabPFN two-step (control then effect); E_A = TabPFN direct (drug quantiles
+# minus control quantiles). floor = sampling noise of the measured effect.
+DM = pd.read_csv(LC / "drug_tab/score/metrics.csv")
+DM = DM[(DM.set == "selected") & (DM.target == "E")].set_index("method")
+DB = pd.read_csv(LC / "drug_tab/score/by_drug_stim.csv")
+DB = DB[(DB.set == "selected") & (DB.by == "drug") & (DB.target == "E")].pivot(index="value", columns="method", values="MSE")
+pc_ = pd.DataFrame({"TabPFN two-step": 100 * (DB.E_B / DB.E0 - 1), "TabPFN direct": 100 * (DB.E_A / DB.E0 - 1)})
+floor_ = DM.floor_E_MSE.iloc[0]
+fig, (ax, ax2) = plt.subplots(1, 2, figsize=(13.5, 6), gridspec_kw={"width_ratios": [1.1, 1]})
+fig.subplots_adjust(left=0.25, right=0.98, top=0.76, bottom=0.15, wspace=0.42)
+rows13 = [("mean effect of the training donors", "E0", MUTED), ("TabPFN, two-step (control, then effect)", "E_B", BLUE),
+          ("TabPFN, direct", "E_A", LIGHTBLUE)]
+yy = np.arange(len(rows13))[::-1]
+for yi, (lab, m, c) in zip(yy, rows13):
+    v = DM.loc[m, "MSE"]
+    ax.barh(yi, v, color=c, height=0.6)
+    ax.text(v + 0.0002, yi, f"{v:.4f}   between-donor R² {DM.loc[m, 'between_R2']:+.2f}", va="center", fontsize=10.5)
+ax.axvline(floor_, color=INK2, ls="--", lw=1.3)
+ax.text(floor_ + 0.0002, -0.62, f"noise floor {floor_:.4f} = {100 * floor_ / DM.loc['E0', 'MSE']:.0f} % of the mean-effect error",
+        ha="left", va="center", fontsize=10, color=INK2)
+ax.set_ylim(-0.85, len(rows13) - 0.5); ax.set_xticks(np.arange(0, 0.0161, 0.004))
+ax.set_yticks(yy, [r[0] for r in rows13]); ax.tick_params(axis="y", length=0)
+ax.set_xlim(0, 0.016); ax.grid(axis="x", color=GRID); ax.set_axisbelow(True)
+ax.set_xlabel("error on a new donor's drug effect (MSE)"); ax.set_title("all 9 drugs", loc="left", fontsize=12)
+dr = list(pc_.sort_values("TabPFN direct").index); x = np.arange(len(dr)); w = 0.38
+ax2.bar(x - w / 2, pc_.loc[dr, "TabPFN two-step"], w, color=BLUE, label="TabPFN two-step")
+ax2.bar(x + w / 2, pc_.loc[dr, "TabPFN direct"], w, color=LIGHTBLUE, label="TabPFN direct")
+ax2.axhline(0, color=INK2, lw=1)
+ax2.set_xticks(x, dr, rotation=45, ha="right"); ax2.set_ylabel("% error vs the mean effect")
+ax2.grid(axis="y", color=GRID); ax2.set_axisbelow(True); ax2.legend(loc="upper left", fontsize=10)
+ax2.set_title("by drug", loc="left", fontsize=12)
+title(fig, "A new patient's drug response is not predictable beyond the average drug effect",
+      "Using the patient's resting cells never beats the mean effect of the training donors, for any drug; most of the error is measurement noise")
+footnote(fig, "Leave-one-donor-out, 19 donors, 9 drugs, 5 stims, selected features q50-q90. Effect = drug + stim minus the plate's DMSO + stim. "
+              "Between-donor R² ≤ 0: no model explains differences between donors.")
+d13 = DM[["MSE", "between_R2", "floor_E_MSE"]].reset_index()
+save(fig, "13_drugs_not_patient_specific", d13)
+
+# ---------------------------------------------------------------- 14. drug ranking on the pregnancy cohort, by pipeline
+# simco stabl_launch/drug_arm_checks.py (2 mishandled visits excluded): predicted change in days to labour when the drug
+# is simulated on each woman, mean over the 100 fold models; shift = treated - untreated DOS (DOS is negative before
+# labour), so delay = -shift. "implausible" = treated women beyond the 95th percentile of untreated nearest-neighbour
+# distance (they look like no real woman).
+DRA = SC / "simco_work/onset_test/drug_models/excl"
+if (DRA / "mix_both_mshiftdrug" / "summary_by_drug.csv").exists():   # our pipeline + average drug effect (mix_mshift_drug.sbatch)
+    pipes = [("paper: CellOT stims + CellOT drug maps", "cellot_cellotdrug", LIGHTBLUE),
+             ("ours: CellOT + TabPFN stims + average drug effect", "mix_both_mshiftdrug", BLUE)]
+    SB = {a: pd.read_csv(DRA / a / "summary_by_drug.csv").set_index("drug") for _, a, _ in pipes}
+    delay = pd.DataFrame({a: -SB[a].drug_mean_shift for _, a, _ in pipes})
+    agree = pd.DataFrame({a: SB[a].frac_folds_negative.where(SB[a].drug_mean_shift < 0, SB[a].frac_folds_positive) for _, a, _ in pipes})
+    P_, O_ = "cellot_cellotdrug", "mix_both_mshiftdrug"
+    robust = [d for d in delay.index if delay.loc[d, P_] > 0 and delay.loc[d, O_] > 0 and agree.loc[d].min() >= 0.8]
+    order14 = list(delay[O_].sort_values().index)
+    fig, ax = plt.subplots(figsize=(11.5, 6.4)); fig.subplots_adjust(left=0.1, right=0.97, top=0.76, bottom=0.12)
+    yy = np.arange(len(order14))
+    for d_ in robust:
+        i = order14.index(d_); ax.axhspan(i - 0.45, i + 0.45, color="#e8f0fb", zorder=0)
+    for yi, d_ in zip(yy, order14):
+        ax.plot([delay.loc[d_, P_], delay.loc[d_, O_]], [yi, yi], color=GRID, lw=3, zorder=1)
+    for k, (lab, a, c) in enumerate(pipes):
+        ax.scatter(delay.loc[order14, a], yy, s=110, color=c, edgecolor=BG, lw=1.5, zorder=3, label=lab)
+    for yi, d_ in zip(yy, order14):
+        ax.text(max(delay.loc[d_]) + 0.4, yi, f"{100 * agree.loc[d_, O_]:.0f} % of folds", va="center", fontsize=9.5, color=INK2)
+    ax.axvline(0, color=INK2, lw=1); ax.set_xlim(delay.values.min() - 0.8, delay.values.max() + 2.6)
+    ax.set_yticks(yy, order14); ax.tick_params(axis="y", length=0)
+    ax.set_xlabel("predicted change in time to labour (days; > 0 = labour later)")
+    ax.grid(axis="x", color=GRID); ax.set_axisbelow(True)
+    ax.legend(loc="lower left", bbox_to_anchor=(0, 1.0), fontsize=10.5, ncol=2)
+    rho = delay.corr(method="spearman").loc[P_, O_]
+    title(fig, f"Drug ranking: {' and '.join(robust) if robust else 'no drug'} delay labour in both pipelines",
+          f"Rank correlation of the 9 drugs between the paper's pipeline and ours: {rho:+.2f}")
+    footnote(fig, "Pregnancy cohort (175 visits), mean over the paper's 100 fold models; % = fold models agreeing in sign (ours). "
+                  "Shaded: later labour in both, ≥ 80 % agreement.")
+    d14 = delay.round(3).join(agree.round(2), rsuffix="_fold_agreement").reset_index()
+    save(fig, "14_drug_ranking", d14)
+else:
+    print("[SKIP ] 14_drug_ranking: drug_models/excl/mix_both_mshiftdrug not ready")
+
+# ---------------------------------------------------------------- 15-17. conditional CellOT: covariates, architecture, table
+# covariates_mse.py: repeats 1-4 x 4 held-out donors, 15 training donors, same cases for every variant.
+CV = pd.read_csv(DAT / "covariates_cases.csv")
+WC = CV.pivot_table(index=["repeat", "donor"], columns="method", values="mse")
+BR = CV.groupby("method").between_R2.first()
+mse = WC.mean(); ref_p = mse["CellOT_paper"]; ref_n = mse["paired"]
+pct_p = lambda m: 100 * (mse[m] / ref_p - 1)
+bt = lambda m, ref="paired": int((WC[m] < WC[ref]).sum())
+nU = len(WC)
+steps15 = [("paired", "paired batches\n(no covariate)", MUTED), ("pc", "own resting\nprofile (PCs)", REF),
+           ("ft_scratch", "learned donor\nembedding", REF), ("ft_immunefm", "foundation-model\nembedding", REF),
+           ("lda", "discriminant\ndonor axes", REF), ("pcblood", "whole-blood\nprofile", BLUE),
+           ("cluster", "phenotype\nsubclusters", BLUE)]
+d15 = pd.DataFrame([(m, l.replace("\n", " "), mse[m], pct_p(m), np.nan if m == "paired" else bt(m), BR[m]) for m, l, _ in steps15],
+                   columns=["method", "label", "MSE", "vs_paper_%", "better_than_paired", "between_R2"])
+fig, ax = plt.subplots(figsize=(12.5, 6.2)); fig.subplots_adjust(left=0.08, right=0.98, top=0.78, bottom=0.2)
+x = np.arange(len(steps15))
+ax.bar(x, d15["vs_paper_%"], color=[c for _, _, c in steps15], width=0.62)
+ax.axhline(0, color=INK2, lw=1.2)
+for xi, (_, r_) in zip(x, d15.iterrows()):
+    lab_ = f"{r_['vs_paper_%']:+.1f} %"
+    if not np.isnan(r_.better_than_paired):
+        lab_ += f"\n{int(r_.better_than_paired)}/{nU} donors"
+    ax.text(xi, r_["vs_paper_%"] - 0.35, lab_, ha="center", va="top", fontsize=10, color=INK)
+ax.set_xticks(x, [l for _, l, _ in steps15], fontsize=10.5); ax.tick_params(axis="x", length=0)
+ax.set_ylim(min(d15["vs_paper_%"]) - 3.2, 3.5); ax.set_ylabel("% error vs paper CellOT (MSE)")
+ax.grid(axis="y", color=GRID); ax.set_axisbelow(True)
+ax.text(0.99, 0.97, f"own profile without penalty on the covariate path: +{pct_p('pc_noreg'):.0f} % (memorises the training donors)",
+        transform=ax.transAxes, ha="right", va="top", fontsize=9.5, color=ORANGE)
+title(fig, "Patient-aware CellOT: the whole-blood and phenotype-subcluster covariates help most",
+      f"Paired batches −{abs(pct_p('paired')):.0f} %; then a donor covariate on top: whole blood −{abs(pct_p('pcblood')):.0f} %, "
+      f"subclusters −{abs(pct_p('cluster')):.0f} % (better than paired CellOT for {bt('cluster')}/{nU} held-out donors)")
+footnote(fig, "4 repeats × 4 held-out donors, 15 training donors, 5 stims (PI, IL33 out), q50-q90; same cases for every variant. "
+              "Donors = held-out donor-repeats better than paired CellOT.")
+save(fig, "15_covariates", d15)
+
+# 16: how the covariate enters the ICNN (schematic) + architecture variants for the whole-blood covariate
+arch = [("pcblood", "gate + bias\n(default)"), ("arch_bias", "bias only"), ("arch_film", "FiLM on\nskip paths"),
+        ("gate_drop0.5", "gate +\ncovariate dropout"), ("gate_wd10", "gate, strong\npenalty"),
+        ("arch_affine", "translation +\nslope"), ("arch_trans", "translation\nonly")]
+d16 = pd.DataFrame([(m, l.replace("\n", " "), mse[m], 100 * (mse[m] / ref_n - 1), bt(m)) for m, l in arch],
+                   columns=["method", "label", "MSE", "vs_paired_%", "better_than_paired"])
+fig = plt.figure(figsize=(14, 6.4))
+axs = fig.add_axes([0.0, 0.06, 0.5, 0.74]); axs.set_xlim(0, 10); axs.set_ylim(0, 7); axs.axis("off")
+box = lambda x0, y0, w, h, t, fc, ec=MUTED, fs=10.5: (axs.add_patch(FancyBboxPatch((x0, y0), w, h, boxstyle="round,pad=0.04,rounding_size=0.12",
+                                                                                 fc=fc, ec=ec, lw=1.4)),
+                                                     axs.text(x0 + w / 2, y0 + h / 2, t, ha="center", va="center", fontsize=fs))
+arrow = lambda x0, y0, x1, y1, c=INK2: axs.annotate("", xy=(x1, y1), xytext=(x0, y0), arrowprops=dict(arrowstyle="->", color=c, lw=1.6))
+box(0.3, 2.6, 1.6, 1.0, "cells x\n(13 markers)", "#f0efec")
+for i, xl in enumerate([2.6, 4.4, 6.2]):
+    box(xl, 2.4, 1.4, 1.4, f"layer {i + 1}\nW ≥ 0", "white")
+box(8.0, 2.6, 1.7, 1.0, "f(x; c)\nconvex in x", "#e8f0fb", BLUE)
+arrow(1.9, 3.1, 2.6, 3.1); arrow(4.0, 3.1, 4.4, 3.1); arrow(5.8, 3.1, 6.2, 3.1); arrow(7.6, 3.1, 8.0, 3.1)
+box(1.6, 5.4, 4.0, 1.0, "donor covariate c\n(from the donor's resting cells)", "#fde9df", ORANGE)
+for xl in [3.3, 5.1, 6.9]:
+    arrow(3.6, 5.4, xl, 3.85, ORANGE)
+axs.text(6.1, 6.35, "in every layer:\n• bias shift  b(c)\n• positive gate  2·sigmoid(G c)\n  on the W ≥ 0 path", ha="left", va="top", fontsize=10, color=ORANGE)
+axs.text(5.0, 1.55, "map = ∇ₓ f(x; c): still an optimal-transport map for every donor", ha="center", fontsize=10.5, color=INK)
+axs.text(5.0, 0.9, "covariate weights start at 0 (= plain CellOT) and are L2-penalised (no memorising)", ha="center",
+         fontsize=10, color=INK2)
+axb = fig.add_axes([0.58, 0.27, 0.4, 0.51])
+xx = np.arange(len(arch))
+axb.bar(xx, d16["vs_paired_%"], color=[BLUE] + [REF] * (len(arch) - 1), width=0.62)
+for xi, (_, r_) in zip(xx, d16.iterrows()):
+    axb.text(xi, r_["vs_paired_%"] - 0.25, f"{r_['vs_paired_%']:+.1f} %", ha="center", va="top", fontsize=9.5)
+axb.axhline(0, color=INK2, lw=1.2); axb.set_ylim(min(d16["vs_paired_%"]) - 1.5, 0.8)
+axb.set_xticks(xx, [l.replace("\n", " ") for _, l in arch], rotation=35, ha="right"); axb.tick_params(axis="x", length=0)
+axb.set_ylabel("% error vs paired CellOT"); axb.grid(axis="y", color=GRID); axb.set_axisbelow(True)
+axb.set_title("how the whole-blood covariate enters", loc="left", fontsize=12)
+for t_ in axb.get_xticklabels(): t_.set_fontsize(9.5)
+title(fig, "How a donor covariate enters the CellOT network",
+      "The covariate shifts each layer's biases and gates its non-negative weights, so the map stays convex (optimal transport) "
+      "for every donor")
+footnote(fig, "Right: whole-blood covariate, 4 repeats × 4 held-out donors, 15 training donors, 5 stims, q50-q90. "
+              "Code: atlas_heldout lc/cond_icnn.py, lc/cond_train.py.")
+save(fig, "16_conditional_icnn", d16)
+
+# 17: table of the covariates tried
+tab = [("none (paired batches)", "no donor information; each batch holds one donor's resting and stimulated cells", "–", "paired"),
+       ("own resting profile", "the donor's 13 resting medians in this cell type, z-scored, PCs fitted on training donors", "3", "pc"),
+       ("whole-blood profile", "own profile + the 4 dominant cell types' medians + their frequencies, blocks weighted equally, PCs", "3", "pcblood"),
+       ("learned donor embedding", "mean cell embedding from a small transformer trained on the atlas (masked markers), PCs", "3", "ft_scratch"),
+       ("foundation-model embedding", "same, starting from the ImmuneFM cytometry foundation model", "3", "ft_immunefm"),
+       ("discriminant donor axes", "regularised LDA of the 28 cell-type log frequencies (max between / within donor)", "3", "lda"),
+       ("phenotype subcluster", "per CELL: k-means on stimulation-stable phenotypic markers; cells paired within donor × cluster", "4", "cluster")]
+d17 = pd.DataFrame([(n, w, dm, mse[m], 100 * (mse[m] / ref_n - 1), np.nan if m == "paired" else bt(m)) for n, w, dm, m in tab],
+                   columns=["covariate", "what it encodes", "dim", "MSE", "vs_paired_%", "better_than_paired"])
+fig = plt.figure(figsize=(14, 6.2)); ax = fig.add_axes([0.01, 0.06, 0.98, 0.76]); ax.axis("off")
+title(fig, "Donor covariates tried in conditional CellOT",
+      "Computed from the new donor's own resting cells only; the projection is fitted on the training donors")
+cols_x = [0.0, 0.2, 0.765, 0.81, 0.9]
+hdr = ["covariate", "what it encodes", "dim", "vs paired", "donors better"]
+ys = np.linspace(0.95, 0.04, len(d17) + 1)
+for xh, h in zip(cols_x, hdr):
+    ax.text(xh, ys[0], h, fontweight="bold", fontsize=11, color=INK2, va="center")
+for i, r_ in d17.iterrows():
+    yy_ = ys[i + 1]
+    if i % 2 == 0: ax.add_patch(Rectangle((-0.01, yy_ - 0.055), 1.02, 0.11, fc="#f0efec", ec="none"))
+    best = r_.covariate in ("whole-blood profile", "phenotype subcluster")
+    ax.text(cols_x[0], yy_, r_.covariate, fontsize=11, va="center", fontweight="bold" if best else "normal",
+            color=BLUE if best else INK)
+    ax.text(cols_x[1], yy_, r_["what it encodes"], fontsize=10, va="center", color=INK2)
+    ax.text(cols_x[2], yy_, r_.dim, fontsize=10.5, va="center")
+    ax.text(cols_x[3], yy_, "reference" if r_.covariate.startswith("none") else f"{r_['vs_paired_%']:+.1f} %", fontsize=10.5, va="center")
+    ax.text(cols_x[4], yy_, "" if np.isnan(r_.better_than_paired) else f"{int(r_.better_than_paired)}/{nU}", fontsize=10.5, va="center")
+footnote(fig, f"MSE vs paired CellOT, 4 repeats × 4 held-out donors, 15 training donors. Without the penalty on the covariate path, "
+              f"the own-profile covariate memorises the training donors (+{100 * (mse['pc_noreg'] / ref_n - 1):.0f} %).")
+save(fig, "17_covariate_table", d17)
+
+
+# ---------------------------------------------------------------- 18. drugs: between-donor R2 of each method (drug_maps_mse.py)
+DMC = pd.read_csv(DAT / "drug_maps_cases.csv").set_index("method")
+m18 = [("E0", "mean drug effect\n(training donors)", MUTED), ("step:gauss_ot", "Gaussian OT\ndrug map", REF),
+       ("step:CellOT", "CellOT\ndrug map", LIGHTBLUE),
+       ("E_B", "TabPFN chained\n(resting → control\n→ effect)", ORANGE),
+       ("E_S65", "TabPFN\n(measured stim control)", BLUE)]
+d18 = pd.DataFrame([(m, l.replace("\n", " "), DMC.loc[m, "between_R2"], DMC.loc[m, "vs_E0_%"], DMC.loc[m, "better_than_E0"])
+                    for m, l, _ in m18], columns=["method", "label", "between_R2", "MSE_vs_mean_effect_%", "better_than_mean_effect"])
+fig, ax = plt.subplots(figsize=(11.5, 6.2)); fig.subplots_adjust(left=0.1, right=0.97, top=0.8, bottom=0.2)
+x = np.arange(len(m18))
+ax.bar(x, d18.between_R2, color=[c for _, _, c in m18], width=0.6)
+ax.axhline(0, color=INK2, lw=1.2)
+for xi, v in zip(x, d18.between_R2):
+    ax.text(xi, v + (0.003 if v >= 0 else -0.003), "0 (reference)" if xi == 0 else f"{v:+.3f}", ha="center",
+            va="bottom" if v >= 0 else "top", fontsize=11)
+ax.set_xticks(x, [l for _, l, _ in m18], fontsize=10); ax.tick_params(axis="x", length=0)
+ax.set_ylim(-0.065, 0.06); ax.set_ylabel("between-donor R² of the drug effect")
+ax.grid(axis="y", color=GRID); ax.set_axisbelow(True)
+ax.text(0.01, 0.97, "0 = predicts the same effect for every donor;  < 0 = worse than that", transform=ax.transAxes,
+        fontsize=10, color=INK2, va="top")
+title(fig, "From resting cells, no method predicts how patients differ in their drug response",
+      "Every drug map and TabPFN from resting cells are at or below the mean drug effect; only TabPFN given the measured stimulated cells is above 0")
+footnote(fig, "5 repeats × 4 held-out donors, 15 training donors, 9 drugs, 5 stims, q50-q90; same 322,027 cases for every method.")
+save(fig, "18_drug_between_r2", d18)
+
+# ---------------------------------------------------------------- 19. TabPFN feature engineering table (companion of 06)
+fe = [("average-effect features only", "donor's resting deviation, average response, spread, noise; quantile, marker", 7, M.loc["pfn_S0", "MSE"], ""),
+      ("+ own profile as 5 PCs", "PCs of the donor's 13 markers × 5 quantiles in this cell type", 12, M.loc["pfn_S1_5", "MSE"], ""),
+      ("raw own profile instead of PCs", "the 65 raw values (13 markers × 5 quantiles)", 72, M.loc["pfn_L1cat", "MSE"], "raw beats PCs"),
+      ("+ whole-donor context", "28 cell-type log frequencies, pregnant or not, 3 whole-blood PCs", 104, M.loc["pfn_L1all_raw", "MSE"], ""),
+      ("+ same marker in the other cell types", "the donor's value at this quantile × marker in all 28 cell types, + mean and SD", 134,
+       M.loc["pfn_L1allM", "MSE"], "biggest gain"),
+      ("− whole-blood PCs", "dropped: no information", 131, R.loc["pfn_L1allM_noBPC", "MSE"], "no loss"),
+      ("compact version", "own profile as mean + spread per marker (26), 8 lineage frequencies instead of 28", 72,
+       R.loc["pfn_C_ms_lin", "MSE"], "half the columns")]
+d19 = pd.DataFrame(fe, columns=["step", "features", "columns", "MSE", "note"])
+fig = plt.figure(figsize=(14, 6)); ax = fig.add_axes([0.01, 0.08, 0.98, 0.78]); ax.axis("off")
+title(fig, "TabPFN feature engineering")
+cx = [0.0, 0.25, 0.75, 0.82, 0.9]
+ys = np.linspace(0.95, 0.04, len(d19) + 1)
+for xh, h in zip(cx, ["step", "features", "columns", "MSE", ""]):
+    ax.text(xh, ys[0], h, fontweight="bold", fontsize=11, color=INK2, va="center")
+for i, r_ in d19.iterrows():
+    yy_ = ys[i + 1]
+    if i % 2 == 0: ax.add_patch(Rectangle((-0.01, yy_ - 0.055), 1.02, 0.11, fc="#f0efec", ec="none"))
+    hl = i in (4, 6)
+    ax.text(cx[0], yy_, r_.step, fontsize=11, va="center", fontweight="bold" if hl else "normal", color=BLUE if hl else INK)
+    ax.text(cx[1], yy_, r_.features, fontsize=10, va="center", color=INK2)
+    ax.text(cx[2], yy_, f"{r_.columns}", fontsize=11, va="center")
+    ax.text(cx[3], yy_, f"{r_.MSE:.4f}", fontsize=11, va="center", fontweight="bold" if hl else "normal")
+    ax.text(cx[4], yy_, r_.note, fontsize=10, va="center", color=BLUE if r_.note else INK2)
+footnote(fig, "TabPFN alone, leave-one-donor-out, 19 donors, 5 stims, q50-q90; one table per (stim, cell type), target = deviation from the "
+              "average response. Average response alone: MSE " + f"{M.loc['shift', 'MSE']:.4f}.")
+save(fig, "19_tabpfn_feature_table", d19)
 
 # ---------------------------------------------------------------- 11. what did not work (table figure)
 K15 = pd.read_csv(DAT / "k15_methods_cases.csv").pivot_table(index=["repeat", "donor"], columns="method", values="mse")

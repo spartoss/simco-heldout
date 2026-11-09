@@ -10,8 +10,9 @@ evaluated on held-out donors: repeated designs (4 test donors, k = 1…15 traini
 ## Final result
 On leave-one-donor-out (19 donors, 5 stims, selected features q50–q90), the best predictor of an unseen donor's
 stimulated quantiles is **0.4 × CellOT conditioned on phenotype subclusters + 0.6 × (average response + TabPFN
-residual)**: MSE **0.0305** vs 0.0398 for the paper's CellOT (−23 %) and 0.0363 for paired CellOT + average response
-(18/19 donors better). Notebooks with results: `notebooks/final_comparison.ipynb`, `notebooks/tab_models.ipynb`.
+residual)**: MSE **0.0299** vs 0.0398 for the paper's CellOT (−25 %) and 0.0363 for paired CellOT + average response
+(19/19 donors better). TabPFN uses the compact 72-column feature set, averaged over the 4
+TabPFN v2 regressor checkpoints (`lc/tab_v2.py --ckpt`, `lc/avg_preds.py`). Notebooks with results: `notebooks/final_comparison.ipynb`, `notebooks/tab_models.ipynb`.
 
 ## Map of the folder
 
@@ -93,6 +94,7 @@ Successive sets, TabPFN alone, leave-one-donor-out (19 donors, 5 stims, q50-q90 
 | ablations of L1allM | without whole-blood PCs / without frequencies / without own profile / mk28 + DW only | 0.0325 / 0.0332 / 0.0343 / 0.0383 |
 | reductions | own profile as 10 PCs / 5 PLS components | 0.0345 / 0.0350 |
 | **`C_ms_lin`** | compact (72 columns): BASE + mk28 + DW + pregnant + `OM` + `FLIN` | **0.0322** |
+| **`C_ms_lin`, 4 checkpoints** | same, predictions averaged over the 4 TabPFN v2 regressor checkpoints (`--ckpt`, `lc/avg_preds.py`) | **0.0318** |
 
 ### Grouping by lineage
 Instead of one table per (stim, cell type), one TabPFN table per (stim, lineage group) with the cell type as a column,
@@ -127,7 +129,9 @@ final features are used. Code: `lc/tab_v2.py --mode group --groupset cur|big|T` 
 `slurm/lineage2*.sbatch`, summaries `lc/lineage2_summary.py`; an earlier round (PC features, 15 donors) is in
 `notebooks/tab_models.ipynb` §8.
 Reference points: average response alone 0.0419, paper CellOT 0.0398; mixed 0.4 / 0.6 with subcluster CellOT,
-L1allM gives 0.0305 (the final model).
+L1allM gives 0.0305, the compact set 0.0301, and the compact set averaged over the 4 TabPFN checkpoints 0.0299 (the
+final model). Checkpoint averaging alone is a small gain (TabPFN alone 0.0322 → 0.0318, 11/19 donors, p 0.055); the
+checkpoints' corrections correlate at 0.98 with the default one, so they are nearly interchangeable.
 
 ## Negative results
 - **Cytometry foundation model (ImmuneFM, `fm/`).** Vendored from github.com/buttelab/ImmuneFM (Ding, Bhattacharya,

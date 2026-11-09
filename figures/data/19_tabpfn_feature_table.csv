@@ -1,0 +1,8 @@
+step,features,columns,MSE,note
+average-effect features only,"donor's resting deviation, average response, spread, noise; quantile, marker",7,0.04148,
++ own profile as 5 PCs,PCs of the donor's 13 markers × 5 quantiles in this cell type,12,0.03616,
+raw own profile instead of PCs,the 65 raw values (13 markers × 5 quantiles),72,0.03456,raw beats PCs
++ whole-donor context,"28 cell-type log frequencies, pregnant or not, 3 whole-blood PCs",104,0.03413,
++ same marker in the other cell types,"the donor's value at this quantile × marker in all 28 cell types, + mean and SD",134,0.03268,biggest gain
+− whole-blood PCs,dropped: no information,131,0.03254,no loss
+compact version,"own profile as mean + spread per marker (26), 8 lineage frequencies instead of 28",72,0.03217,half the columns

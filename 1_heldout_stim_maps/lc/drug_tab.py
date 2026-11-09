@@ -13,7 +13,8 @@ Models, one TabPFN table per (fold, stim, celltype, plate / drug):
 Predictions kept for the test donor (per drug, stim, celltype, q, marker): truths D, C, E and their split-half noise;
   C0 = mean C + u_dev, C_hat; D0 = mean D + u_dev (drug "shift"), D_hat; E0 = mean E (mean training drug effect),
   E_A = D_hat - C_hat, E_B; D_B = C_hat + E_B; D_C0E = C_hat + E0.
-Writes WORK/drug_tab/lodo/fold_<f>.pkl; checkpoints after each stim (rerun resumes).
+Writes WORK/drug_tab/lodo/fold_<f>.pkl (--design repeat: rep<tag>/fold_<repeat>.pkl, 15 training donors); checkpoints
+after each stim (rerun resumes).
     python -m lc.drug_tab --fold 0 [--stims IFNa --celltypes CD8Tem --drugs SA --tag _smoke]
 """
 import argparse
@@ -62,11 +63,17 @@ def main():
     ap.add_argument("--celltypes", nargs="*", default=None)
     ap.add_argument("--drugs", nargs="*", default=None)
     ap.add_argument("--tag", default="")
+    ap.add_argument("--design", choices=["lodo", "repeat"], default="lodo",
+                    help="lodo: design_lodo.json fold (18 training donors); repeat: design.json repeat --fold (its 15 training donors)")
     a = ap.parse_args()
     G = pickle.load(open(OUT / "tables.pkl", "rb")); DT, plates = G["T"], G["plates"]
     drugs = a.drugs or sorted(plates)
-    dz = json.load(open(WORK / "design_lodo.json"))[a.fold]; train, tests = dz["order"], dz["test"]
-    out = OUT / f"lodo{a.tag}"; out.mkdir(parents=True, exist_ok=True)
+    if a.design == "repeat":
+        dz = [x for x in json.load(open(WORK / "design.json")) if x["repeat"] == a.fold][0]
+        train, tests, K = dz["order"][:15], dz["test"], 15
+    else:
+        dz = json.load(open(WORK / "design_lodo.json"))[a.fold]; train, tests, K = dz["order"], dz["test"], 18
+    out = OUT / (f"rep{a.tag}" if a.design == "repeat" else f"lodo{a.tag}"); out.mkdir(parents=True, exist_ok=True)
     ck = out / f"partial_fold_{a.fold}.pkl"; done, parts = set(), []
     if ck.exists(): done, parts = pickle.load(open(ck, "rb")); print(f"[RESUM] {sorted(done)}", flush=True)
     for s in a.stims:
@@ -74,7 +81,7 @@ def main():
         t0 = time.time()
         for c in sorted({c for st, c in PAIRS if st == s}):
             if a.celltypes and c not in a.celltypes: continue
-            B = V.build(a.fold, 18, s, [c], train, tests, QK)
+            B = V.build(a.fold, K, s, [c], train, tests, QK)
             if B is None or not B.is_test.any(): continue
             trd = sorted(B.loc[~B.is_test, "donor"].unique()); ted = sorted(B.loc[B.is_test, "donor"].unique())
             te = B[B.is_test]

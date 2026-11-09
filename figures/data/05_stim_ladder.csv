@@ -1,6 +1,6 @@
 step,method,MSE,change_vs_previous_%,donors_better_than_previous
-"CellOT, paper training",CellOT_paper,0.03979,,
-+ paired batches (one donor per batch),CellOT_paired,0.03873,-2.663985926112089,13.0
-+ phenotype-subcluster covariate,CellOT_cluster,0.03698,-4.518461141234187,17.0
-+ average with the mean shift (50/50),CellOT_cluster+shift,0.03528,-4.597079502433743,13.0
-+ TabPFN donor model (0.4 CellOT / 0.6 TabPFN),0.4 CellOT_cluster + 0.6 pfn_L1allM,0.03045,-13.690476190476186,15.0
+"CellOT, paper training",CellOT_paper,0.03979196316308362,,
++ paired batches (one donor per batch),CellOT_paired,0.03872831791235356,-2.6730152678590247,13.0
++ phenotype-subcluster covariate,CellOT_cluster,0.036976926418124376,-4.5222503548767,17.0
+TabPFN donor model alone,pfn_avg4,0.031763916956512116,-14.09800642342487,14.0
+ensemble 0.4 CellOT + 0.6 TabPFN,mix_cluster,0.02989185136154851,-5.893686214853933,14.0

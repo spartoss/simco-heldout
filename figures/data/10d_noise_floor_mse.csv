@@ -6,6 +6,6 @@ in two halves (cell sampling only)",0.0013413425767794251
 = realistic floor",0.003552574840991001
 "well effect shared by all donors not learned
 (stimulated wells only)",0.003976533655698948
-CellOT + TabPFN (ours),0.03045
+CellOT + TabPFN (ours),0.02989185136154851
 "CellOT, paper training",0.03979
 average response only,0.04187

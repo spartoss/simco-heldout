@@ -1,0 +1,8 @@
+covariate,what it encodes,dim,MSE,vs_paired_%,better_than_paired
+none (paired batches),no donor information; each batch holds one donor's resting and stimulated cells,–,0.0219143926062176,0.0,
+own resting profile,"the donor's 13 resting medians in this cell type, z-scored, PCs fitted on training donors",3,0.02144331109733089,-2.1496443791604647,9.0
+whole-blood profile,"own profile + the 4 dominant cell types' medians + their frequencies, blocks weighted equally, PCs",3,0.02038109405524268,-6.9967649960779195,12.0
+learned donor embedding,"mean cell embedding from a small transformer trained on the atlas (masked markers), PCs",3,0.021534441890631736,-1.733795329915122,9.0
+foundation-model embedding,"same, starting from the ImmuneFM cytometry foundation model",3,0.021308536053769467,-2.7646513564616892,10.0
+discriminant donor axes,regularised LDA of the 28 cell-type log frequencies (max between / within donor),3,0.022343923683692132,1.9600409885540904,6.0
+phenotype subcluster,per CELL: k-means on stimulation-stable phenotypic markers; cells paired within donor × cluster,4,0.020744923311144806,-5.3365352902411285,16.0

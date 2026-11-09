@@ -1,0 +1,6 @@
+method,label,between_R2,MSE_vs_mean_effect_%,better_than_mean_effect
+E0,mean drug effect (training donors),0.0,0.0,0
+step:gauss_ot,Gaussian OT drug map,-0.0131878798933742,1.1696490162154791,6
+step:CellOT,CellOT drug map,-0.0429161619956948,13.560397388203294,0
+E_B,TabPFN chained (resting → control → effect),-0.0145172407488811,1.4273629475316296,7
+E_S65,TabPFN (measured stim control),0.0395484901913298,-3.858870017747829,19
